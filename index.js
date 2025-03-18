@@ -487,14 +487,17 @@ class OBSInstance extends InstanceBase {
 		//Transitions
 		this.obs.on('CurrentSceneTransitionChanged', async (data) => {
 			let transition = await this.sendRequest('GetCurrentSceneTransition')
+			let sceneTransitionCursor = await this.sendRequest('GetCurrentSceneTransitionCursor')
 
 			this.states.currentTransition = data.transitionName
 			this.states.transitionDuration = transition?.transitionDuration ?? '0'
+			this.states.transitionPosition = sceneTransitionCursor?.transitionCursor ?? '0'
 
 			this.checkFeedbacks('transition_duration', 'current_transition')
 			this.setVariableValues({
 				current_transition: this.states.currentTransition,
 				transition_duration: this.states.transitionDuration,
+				transition_position: this.states.transitionPosition,
 			})
 		})
 		this.obs.on('CurrentSceneTransitionDurationChanged', (data) => {
@@ -1148,6 +1151,7 @@ class OBSInstance extends InstanceBase {
 
 		let sceneTransitionList = await this.sendRequest('GetSceneTransitionList')
 		let currentTransition = await this.sendRequest('GetCurrentSceneTransition')
+		let currentTransitionPosition = await this.sendRequest('GetCurrentSceneTransitionCursor')
 
 		if (sceneTransitionList) {
 			sceneTransitionList.transitions?.forEach((transition) => {
@@ -1156,12 +1160,14 @@ class OBSInstance extends InstanceBase {
 
 			this.states.currentTransition = currentTransition?.transitionName ?? 'None'
 			this.states.transitionDuration = currentTransition?.transitionDuration ?? '0'
+			this.states.transitionPosition = currentTransitionPosition?.transitionCursor ?? '0'
 
 			this.checkFeedbacks('transition_duration', 'current_transition')
 			this.setVariableValues({
 				current_transition: this.states.currentTransition,
 				transition_duration: this.states.transitionDuration,
 				transition_active: 'False',
+				transition_position: this.states.transitionPosition,
 			})
 		}
 	}
