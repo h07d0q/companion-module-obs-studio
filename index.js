@@ -222,6 +222,7 @@ class OBSInstance extends InstanceBase {
 						EventSubscription.InputActiveStateChanged |
 						EventSubscription.InputShowStateChanged |
 						EventSubscription.InputVolumeMeters |
+						EventSubscription.Transitions |
 						EventSubscription.SceneItemTransformChanged,
 					rpcVersion: 1,
 				},
@@ -485,6 +486,9 @@ class OBSInstance extends InstanceBase {
 			this.updateInputSettings(source, settings)
 		})
 		//Transitions
+		this.obs.on('Transitions', (data) => {
+			this.log('info',data)
+		})
 		this.obs.on('CurrentSceneTransitionChanged', async (data) => {
 			let transition = await this.sendRequest('GetCurrentSceneTransition')
 			let sceneTransitionCursor = await this.sendRequest('GetCurrentSceneTransitionCursor')
@@ -505,14 +509,22 @@ class OBSInstance extends InstanceBase {
 			this.checkFeedbacks('transition_duration')
 			this.setVariableValues({ transition_duration: this.states.transitionDuration })
 		})
-		this.obs.on('SceneTransitionStarted', () => {
+		this.obs.on('SceneTransitionStarted', async () => {
+			let sceneTransitionCursor = await this.sendRequest('GetCurrentSceneTransitionCursor')
+			this.states.transitionPosition = sceneTransitionCursor?.transitionCursor ?? '0'
+			this.log('info',JSON.stringify(sceneTransitionCursor))
+			
 			this.states.transitionActive = true
-			this.setVariableValues({ transition_active: 'True' })
+			this.setVariableValues({ transition_active: 'True', transition_position: this.states.transitionPosition })
 			this.checkFeedbacks('transition_active')
 		})
-		this.obs.on('SceneTransitionEnded', () => {
+		this.obs.on('SceneTransitionEnded', async () => {
+			let sceneTransitionCursor = await this.sendRequest('GetCurrentSceneTransitionCursor')
+			this.states.transitionPosition = sceneTransitionCursor?.transitionCursor ?? '0'
+			this.log('info',JSON.stringify(sceneTransitionCursor))
+			
 			this.states.transitionActive = false
-			this.setVariableValues({ transition_active: 'False' })
+			this.setVariableValues({ transition_active: 'False', transition_position: this.states.transitionPosition })
 			this.checkFeedbacks('transition_active')
 		})
 		this.obs.on('SceneTransitionVideoEnded', () => {})

@@ -464,6 +464,7 @@ export function getActions() {
 				default: 0.0,
 				min: 0.0,
 				max: 1.0,
+				step: 0.01,
 				range: true,
 				isVisible: (options) => !options.useVariable,
 			},
@@ -483,13 +484,17 @@ export function getActions() {
 				default: false,
 			},
 		],
-		callback: async () => {
+		callback: async (action) => {
 			let position = 0.0
 			if (this.states.studioMode) {
 				if (action.options.useVariable) {
-					position = eval(parseVariablesInString(action.options.variableValue))
+					let expr = await this.parseVariablesInString(action.options.variableValue);
+					position = eval(expr);
+					this.log('info','expr: ' + expr)
+					this.log('info','pos: ' + position)
 				} else {
 					position = action.options.position
+					this.log('info','pos: ' + position)
 				}
 				if (position > 1.0) {
 					this.log(
@@ -506,7 +511,7 @@ export function getActions() {
 				}
 				await this.sendRequest('SetTBarPosition', {
 					position: position,
-					release: true,
+					release: true
 				})
 			} else {
 				this.log(
