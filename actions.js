@@ -453,6 +453,72 @@ export function getActions() {
 			}
 		},
 	}
+	actions['set_transition_position'] = {
+		name: 'Set T-Bar Position',
+		options: [
+			{
+				type: 'number',
+				label: 'T-Bar position (in %)',
+				tooltip: 'Must be >= 0, <= 100',
+				id: 'position',
+				default: 0,
+				min: 0,
+				max: 100,
+				step: 1,
+				range: true,
+				isVisible: (options) => !options.useVariable,
+			},
+			{
+				type: 'textinput',
+				id: 'variableValue',
+				label: 'T-Bar position expression',
+				useVariables: true,
+				tooltip: 'Value can be incremented like: $(obs:transition_position) + 5',
+				default: '0',
+				isVisible: (options) => options.useVariable,
+			},
+			{
+				type: 'checkbox',
+				label: 'Use Variable',
+				id: 'useVariable',
+				default: false,
+			},
+		],
+		callback: async (action) => {
+			let position = 0
+			if (this.states.studioMode) {
+				if (action.options.useVariable) {
+					let expr = await this.parseVariablesInString(action.options.variableValue);
+					position = eval(expr);
+				} else {
+					position = action.options.position
+				}
+				if (position > 100) {
+					this.log(
+						'warn',
+						'The calculated T-Bar position exceeds the maximum. Setting to 100',
+					)
+					position = 100
+				} else if (position < 0) {
+					this.log(
+						'warn',
+						'The calculated T-Bar position is below 0. Setting to 0',
+					)
+					position = 0
+				}
+				await this.sendRequest('SetTBarPosition', {
+					position: position / 100,
+					release: true
+				})
+			} else {
+				this.log(
+					'warn',
+					'The Transition action requires OBS to be in Studio Mode. Try switching to Studio Mode.',
+				)
+				return
+			}
+		},
+	}
 	actions['set_stream_settings'] = {
 		name: 'Set Stream Settings',
 		options: [

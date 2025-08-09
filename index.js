@@ -222,6 +222,7 @@ class OBSInstance extends InstanceBase {
 						EventSubscription.InputActiveStateChanged |
 						EventSubscription.InputShowStateChanged |
 						EventSubscription.InputVolumeMeters |
+						EventSubscription.Transitions |
 						EventSubscription.SceneItemTransformChanged,
 					rpcVersion: 1,
 				},
@@ -253,6 +254,7 @@ class OBSInstance extends InstanceBase {
 
 					//Build Scene Collection Parameters
 					this.buildSceneTransitionList()
+					this.getTransitionPosition()
 					this.buildSpecialInputs()
 					this.buildSceneList()
 				} else {
@@ -490,7 +492,7 @@ class OBSInstance extends InstanceBase {
 
 			this.states.currentTransition = data.transitionName
 			this.states.transitionDuration = transition?.transitionDuration ?? '0'
-
+			
 			this.checkFeedbacks('transition_duration', 'current_transition')
 			this.setVariableValues({
 				current_transition: this.states.currentTransition,
@@ -502,14 +504,40 @@ class OBSInstance extends InstanceBase {
 			this.checkFeedbacks('transition_duration')
 			this.setVariableValues({ transition_duration: this.states.transitionDuration })
 		})
-		this.obs.on('SceneTransitionStarted', () => {
+		this.obs.on('SceneTransitionStarted', async () => {
+			let sceneTransitionCursor = await this.sendRequest('GetCurrentSceneTransitionCursor')
+			if (sceneTransitionCursor) {
+				this.states.transitionPosition = Math.round(sceneTransitionCursor.transitionCursor * 100);
+			} else {
+				this.states.transitionPosition = 0
+			}
+			//this.states.transitionPosition = sceneTransitionCursor? ?? '0'
+			this.log('info','SceneTransitionStarted: ' + JSON.stringify(sceneTransitionCursor))
+			this.log('info','SceneTransitionStarted: Pos ' + this.states.transitionPosition)
+			
 			this.states.transitionActive = true
-			this.setVariableValues({ transition_active: 'True' })
+			if (!this.TransitionPositionPoll) {
+					this.startTransitionPositionPoll()
+				}
+			this.setVariableValues({ transition_active: 'True', transition_position: this.states.transitionPosition })
 			this.checkFeedbacks('transition_active')
 		})
-		this.obs.on('SceneTransitionEnded', () => {
+		this.obs.on('SceneTransitionEnded', async () => {
+			let sceneTransitionCursor = await this.sendRequest('GetCurrentSceneTransitionCursor')
+			//this.states.transitionPosition = sceneTransitionCursor?.transitionCursor ?? '0'
+			if (sceneTransitionCursor) {
+				this.states.transitionPosition = Math.round(sceneTransitionCursor.transitionCursor * 100);
+			} else {
+				this.states.transitionPosition = 0
+			}
+			this.log('info','SceneTransitionEnded: ' + JSON.stringify(sceneTransitionCursor))
+			this.log('info','SceneTransitionEnded: Pos ' + this.states.transitionPosition)
+			
 			this.states.transitionActive = false
-			this.setVariableValues({ transition_active: 'False' })
+			if (this.TransitionPositionPoll) {
+					this.stopTransitionPositionPoll()
+				}
+			this.setVariableValues({ transition_active: 'False', transition_position: this.states.transitionPosition })
 			this.checkFeedbacks('transition_active')
 		})
 		this.obs.on('SceneTransitionVideoEnded', () => {})
@@ -655,6 +683,7 @@ class OBSInstance extends InstanceBase {
 	async sendRequest(requestType, requestData) {
 		try {
 			let data = await this.obs.call(requestType, requestData)
+			//this.log('debug', `Request ${requestType ?? ''} data: (${JSON.stringify(requestData)})`)
 			return data
 		} catch (error) {
 			this.log('debug', `Request ${requestType ?? ''} failed (${error})`)
@@ -760,6 +789,20 @@ class OBSInstance extends InstanceBase {
 		if (this.mediaPoll) {
 			clearInterval(this.mediaPoll)
 			this.mediaPoll = null
+		}
+	}
+	
+	startTransitionPositionPoll() {
+		this.stopTransitionPositionPoll()
+		this.TransitionPositionPoll = setInterval(() => {
+			this.getTransitionPosition()
+		}, 1000)
+	}
+
+	stopTransitionPositionPoll() {
+		if (this.TransitionPositionPoll) {
+			clearInterval(this.TransitionPositionPoll)
+			this.TransitionPositionPoll = null
 		}
 	}
 
@@ -1179,7 +1222,7 @@ class OBSInstance extends InstanceBase {
 			sceneTransitionList.transitions?.forEach((transition) => {
 				this.transitionList.push({ id: transition.transitionName, label: transition.transitionName })
 			})
-
+			
 			this.states.currentTransition = currentTransition?.transitionName ?? 'None'
 			this.states.transitionDuration = currentTransition?.transitionDuration ?? '0'
 
@@ -1191,7 +1234,20 @@ class OBSInstance extends InstanceBase {
 			})
 		}
 	}
-
+	
+	async getTransitionPosition() {
+		let currentTransitionPosition = await this.sendRequest('GetCurrentSceneTransitionCursor')
+		//this.states.transitionPosition = currentTransitionPosition?.transitionCursor ?? '0'
+		if (currentTransitionPosition) {
+				this.states.transitionPosition = Math.round(currentTransitionPosition.transitionCursor * 100);
+			} else {
+				this.states.transitionPosition = 0
+			}
+		this.log('info','getTransitionPosition: ' + JSON.stringify(currentTransitionPosition))
+		this.setVariableValues({
+				transition_position: this.states.transitionPosition,
+			})
+	}
 	//Scene and Source Actions
 	addScene(sceneName) {
 		this.sceneChoices.push({ id: sceneName, label: sceneName })
@@ -1513,3 +1569,16 @@ class OBSInstance extends InstanceBase {
 	}
 }
 runEntrypoint(OBSInstance, UpgradeScripts)
+
+const replacerFunc = () => {
+    const visited = new WeakSet();
+    return (key, value) => {
+      if (typeof value === "object" && value !== null) {
+        if (visited.has(value)) {
+          return;
+        }
+        visited.add(value);
+      }
+      return value;
+    };
+  };
